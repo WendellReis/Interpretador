@@ -1,11 +1,11 @@
 from frame import Frame
 import sys
 
-LABLES = None
-CODE = None
-PC = 0
-STACK: list[Frame] = []
-GLOBALS = {}
+CODE: list[list[str]] = None  # Lista de instruções
+LABLES: dict[str,int] = None  # Lista de marcadores
+PC = 0                        # Program Counter
+STACK: list[Frame] = []       # Pilha de frames (chamadas de funções)
+GLOBALS = {}                  # Variáveis globais
 
 def read_code(dir):
     with open(dir,'+r') as file:
