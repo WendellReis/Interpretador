@@ -6,6 +6,7 @@ LABLES: dict[str,int] = None  # Lista de marcadores
 PC = 0                        # Program Counter
 STACK: list[Frame] = []       # Pilha de frames (chamadas de funções)
 GLOBALS = {}                  # Variáveis globais
+PARAMETERS = []               # Fila de parâmetros usado pela instrução PARAM
 
 def read_code(dir):
     with open(dir,'+r') as file:
@@ -63,7 +64,7 @@ def to_value(id):
     if val is not None:
         return val
     
-    # id é uma variável local?
+    # id é um argumento de função ou variável local?
     frame = current_frame()
     val = frame.get_var(id)
     if val is not None:
