@@ -2,7 +2,7 @@ from frame import Frame
 import sys
 
 CODE: list[list[str]] = None  # Lista de instruções
-LABLES: dict[str,int] = None  # Lista de marcadores
+LABELS: dict[str,int] = None  # Lista de marcadores
 PC = 0                        # Program Counter
 STACK: list[Frame] = []       # Pilha de frames (chamadas de funções)
 GLOBALS = {}                  # Variáveis globais
@@ -132,13 +132,13 @@ def LABEL():
 def JUMP():
     global PC
     label = get_addresses()[0]
-    PC = LABLES[label]
+    PC = LABELS[label]
 
 def BGT():
     global PC
     a,b,label = get_addresses()
     if to_value(a) > to_value(b):
-        PC = LABLES[label]
+        PC = LABELS[label]
     else:
         PC += 1
 
@@ -146,7 +146,7 @@ def BGE():
     global PC
     a,b,label = get_addresses()
     if to_value(a) >= to_value(b):
-        PC = LABLES[label]
+        PC = LABELS[label]
     else:
         PC += 1
 
@@ -154,7 +154,7 @@ def BLT():
     global PC
     a,b,label = get_addresses()
     if to_value(a) < to_value(b):
-        PC = LABLES[label]
+        PC = LABELS[label]
     else:
         PC += 1
 
@@ -162,7 +162,7 @@ def BLE():
     global PC
     a,b,label = get_addresses()
     if to_value(a) <= to_value(b):
-        PC = LABLES[label]
+        PC = LABELS[label]
     else:
         PC += 1
 
@@ -188,11 +188,11 @@ def main():
     if len(args)<=1:
         return
     
-    CODE, LABLES = read_code(args[1])
+    CODE, LABELS = read_code(args[1])
     print(CODE)
 
     STACK.append(Frame())
-    PC = LABLES.get('main',None)
+    PC = LABELS.get('main',None)
 
     while PC:
         HANDLER[code_type(PC)]()
