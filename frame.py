@@ -10,12 +10,11 @@ class Frame():
     def __init__(   
         self, 
         static_link=None,
-        variables={},
         args={}
     ):
         self.static_link = static_link
-        self.variables = variables
         self.args = args
+        self.variables = {}
 
     def new_var(self, id):
         if id in self.variables:
@@ -27,6 +26,7 @@ class Frame():
 
         if val is None:
             return self.args.get(id,None)
+        return val
     
     def set_var(self, id, val):
         if id in self.args:

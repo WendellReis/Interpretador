@@ -15,19 +15,17 @@ def read_code(dir):
     code = code.split('\n')
     labels = {}
     for i, line in enumerate((code)):
-        line = line.split(' ')
+        code[i] = line = line.split(' ')
         if line[0] == 'LABEL':
             labels[line[1]] = i
     return code, labels
 
 def current_frame():
-    return STACK[-1]
+    global STACK
+    return STACK[-1] if len(STACK) else None
 
 def code_type(idx):
     return CODE[idx][0]
-
-def LOAD():
-    pass
 
 def get_addresses():
     '''
@@ -48,11 +46,12 @@ def is_number(val):
         except ValueError:
             return None
 
-
 def to_value(id):
     '''
     Retorna o valor numérico ou da variável associada a id
     '''
+
+    global GLOBALS, STACK
 
     # id é número?
     val = is_number(id)
@@ -68,9 +67,34 @@ def to_value(id):
     frame = current_frame()
     val = frame.get_var(id)
     if val is not None:
-        return val
+        return to_value(val)
     return None
 
+def LOAD():
+    global PC, GLOBALS, STACK
+    a,b = get_addresses()
+
+    try:
+        if b in GLOBALS:
+            b = GLOBALS[b]
+        elif b in current_frame().variables:
+            b = current_frame().get_var(b)
+    except:
+        1
+        
+    b = to_value(b)
+
+    if a in GLOBALS:
+        GLOBALS[a] = b
+    else:
+        try:
+            if a not in current_frame().variables:
+                current_frame().new_var(a)
+            current_frame().set_var(a,b)
+        except:
+            GLOBALS[a] = b
+    
+    PC+=1
 
 def ADD():
     global PC
@@ -83,7 +107,6 @@ def ADD():
         current_frame().set_var(a,val)
 
     PC += 1
-
 
 def SUB():
     global PC
@@ -137,6 +160,7 @@ def JUMP():
 def BGT():
     global PC
     a,b,label = get_addresses()
+
     if to_value(a) > to_value(b):
         PC = LABELS[label]
     else:
@@ -166,11 +190,39 @@ def BLE():
     else:
         PC += 1
 
+def PARAM():
+    global PC, PARAMETERS
+    a = get_addresses()[0]
+    PARAMETERS.append(to_value(a))
+    
+    PC += 1
+
 def CALL():
-    pass
+    global PC, PARAMETERS, STACK, LABELS
+    a, b = get_addresses()
+    params = {}
+    for i in range(to_value(b)):
+        aux = PARAMETERS.pop(0)
+        params[f'a{i}'] = to_value(aux)
+    PARAMETERS.clear()
+    
+    STACK.append(Frame(PC+1,params))
+    PC = LABELS.get(a,None)
 
 def RETURN():
-    pass
+    global PC, STACK, GLOBALS
+    a = get_addresses()[0]
+    GLOBALS['ra'] = to_value(a)
+    # print(len(STACK))
+    PC = current_frame().static_link
+    STACK.pop()
+
+def PRINT():
+    global PC
+    a = get_addresses()[0]
+    print(to_value(a))
+
+    PC += 1
 
 def main():
     HANDLER = {
@@ -181,21 +233,35 @@ def main():
         'DIV': DIV,
         'LABEL': LABEL,
         'J': JUMP,
+        'BGT': BGT,
+        'BGE': BGE, 
+        'BLT': BLT,
+        'BLE': BLE,
+        'PARAM': PARAM,
         'CALL': CALL,
         'RET': RETURN,
+        'PRINT': PRINT,
+        '': None
     }
     args = sys.argv
     if len(args)<=1:
         return
-    
+    global CODE, LABELS, PC
     CODE, LABELS = read_code(args[1])
-    print(CODE)
+    PC = 0
+
+    while code_type(PC) != 'LABEL':
+        HANDLER[code_type(PC)]()
 
     STACK.append(Frame())
     PC = LABELS.get('main',None)
 
-    while PC:
-        HANDLER[code_type(PC)]()
+    while PC is not None:
+        func = code_type(PC)
+        if func:
+            HANDLER[code_type(PC)]()
+        else:
+            PC += 1
 
 if __name__ == "__main__":
     main()
