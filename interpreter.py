@@ -1,23 +1,37 @@
 from frame import Frame
 import sys
+import shlex
 
 CODE: list[list[str]] = None  # Lista de instruções
 LABELS: dict[str,int] = None  # Lista de marcadores
 PC = 0                        # Program Counter
 STACK: list[Frame] = []       # Pilha de frames (chamadas de funções)
-GLOBALS = {}                  # Variáveis globais
+GLOBALS = {'ra': None}        # Variáveis globais
 PARAMETERS = []               # Fila de parâmetros usado pela instrução PARAM
 
 def read_code(dir):
-    with open(dir,'+r') as file:
-        code = file.read()
+    with open(dir, 'r', encoding='utf-8-sig') as file:
+        lines = file.readlines()
         
-    code = code.split('\n')
+    code = []
     labels = {}
-    for i, line in enumerate((code)):
-        code[i] = line = line.split(' ')
-        if line[0] == 'LABEL':
-            labels[line[1]] = i
+    
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            code.append([''])
+            continue
+            
+        parts = shlex.split(line)
+        if not parts:
+            code.append([''])
+            continue
+
+        code.append(parts)
+        
+        if parts[0] == 'LABEL':
+            labels[parts[1]] = i
+            
     return code, labels
 
 def current_frame():
@@ -35,118 +49,111 @@ def get_addresses():
     return addresses
 
 def is_number(val):
-    '''
-    Tenta converter uma string em número
-    '''
-    try:
-        return int(val)
-    except ValueError:
+    if '.' in str(val):
         try:
             return float(val)
         except ValueError:
             return None
+    try:
+        return int(val)
+    except ValueError:
+        return None
 
 def to_value(id):
-    '''
-    Retorna o valor numérico ou da variável associada a id
-    '''
-
     global GLOBALS, STACK
-
+    
     # id é número?
     val = is_number(id)
-    if val is not None:
+    if val is not None: 
         return val
-    
+        
+    # id é uma posição de array?
+    if '$' in id:
+        name, pos = id.split('$')
+        pos_val = int(to_value(pos))
+        
+        target = GLOBALS.get(name)
+        if target is None and current_frame():
+            target = current_frame().get_var(name)
+        
+        return target[pos_val] if target is not None else None
+
     # id é uma váriável global?
-    val = GLOBALS.get(id,None)
-    if val is not None:
-        return val
+    if id in GLOBALS: 
+        return GLOBALS[id]
     
-    # id é um argumento de função ou variável local?
     frame = current_frame()
-    val = frame.get_var(id)
-    if val is not None:
-        return to_value(val)
-    return None
+    if frame:
+        val = frame.get_var(id)
+        if val is not None:
+            # Se a variável guarda o nome de outra (alias/ponteiro), resolve recursivo
+            return to_value(val) if isinstance(val, str) and val != id else val
+    
+    return id
+
+def set_value(id, val):
+    global GLOBALS, STACK
+    
+    if '$' not in id:
+        if id in GLOBALS:
+            GLOBALS[id] = val
+        else:
+            frame = current_frame()
+            if frame:
+                if id not in frame.variables:
+                    frame.new_var(id)
+                frame.set_var(id, val)
+            else:
+                GLOBALS[id] = val
+    else:
+        name, pos = id.split('$')
+        pos = int(to_value(pos))
+        
+        if name in GLOBALS:
+            GLOBALS[name][pos] = val
+        else:
+            frame = current_frame()
+            if frame:
+                target_array = frame.get_var(name)
+                target_array[pos] = val
 
 def LOAD():
-    global PC, GLOBALS, STACK
-    a,b = get_addresses()
-
-    try:
-        if b in GLOBALS:
-            b = GLOBALS[b]
-        elif b in current_frame().variables:
-            b = current_frame().get_var(b)
-    except:
-        1
-        
-    b = to_value(b)
-
-    if a in GLOBALS:
-        GLOBALS[a] = b
-    else:
-        try:
-            if a not in current_frame().variables:
-                current_frame().new_var(a)
-            current_frame().set_var(a,b)
-        except:
-            GLOBALS[a] = b
-    
-    PC+=1
+    global PC
+    a, b = get_addresses()
+    val = to_value(b)
+    set_value(a, val)
+    PC += 1
 
 def ADD():
     global PC
-    a,b,c = get_addresses()
+    a, b, c = get_addresses()
     val = to_value(b) + to_value(c)
-
-    if a in GLOBALS:
-        GLOBALS[a] = val
-    else:
-        current_frame().set_var(a,val)
-
+    set_value(a, val)
     PC += 1
 
 def SUB():
     global PC
-    a,b,c = get_addresses()
+    a, b, c = get_addresses()
     val = to_value(b) - to_value(c)
-
-    if a in GLOBALS:
-        GLOBALS[a] = val
-    else:
-        current_frame().set_var(a,val)
-
+    set_value(a, val)
     PC += 1
 
 def MULT():
     global PC
-    a,b,c = get_addresses()
-    val = to_value(b)*to_value(c)
-
-    if a in GLOBALS:
-        GLOBALS[a] = val
-    else:
-        current_frame().set_var(a,val)
-
+    a, b, c = get_addresses()
+    val = to_value(b) * to_value(c)
+    set_value(a, val)
     PC += 1
 
 def DIV():
-        global PC
-        a,b,c = get_addresses()
-
-        try:
-            val = to_value(b)/to_value(c)
-        except ZeroDivisionError:
-            val = 0
-
-        if a in GLOBALS:
-            GLOBALS[a] = val
-        else:
-            current_frame().set_var(a,val)
-
-        PC += 1
+    global PC
+    a, b, c = get_addresses()
+    try:
+        val = to_value(b) / to_value(c)
+    except ZeroDivisionError:
+        val = 0
+    set_value(a, val)
+    PC += 1
 
 def LABEL():
     global PC
@@ -156,6 +163,24 @@ def JUMP():
     global PC
     label = get_addresses()[0]
     PC = LABELS[label]
+
+def BEQ():
+    global PC
+    a,b,label = get_addresses()
+
+    if to_value(a) == to_value(b):
+        PC = LABELS[label]
+    else:
+        PC += 1
+
+def BNE():
+    global PC
+    a,b,label = get_addresses()
+
+    if to_value(a) != to_value(b):
+        PC = LABELS[label]
+    else:
+        PC += 1
 
 def BGT():
     global PC
@@ -213,7 +238,6 @@ def RETURN():
     global PC, STACK, GLOBALS
     a = get_addresses()[0]
     GLOBALS['ra'] = to_value(a)
-    # print(len(STACK))
     PC = current_frame().static_link
     STACK.pop()
 
@@ -222,6 +246,29 @@ def PRINT():
     a = get_addresses()[0]
     print(to_value(a))
 
+    PC += 1
+
+def READLN():
+    global PC
+    addresses = get_addresses()
+    a = addresses[0]
+    b = input()
+    # Tenta converter input para número se aplicável
+    val = is_number(b) if is_number(b) is not None else b
+    set_value(a, val)
+    PC += 1
+
+def ALLOC():
+    global PC, GLOBALS, STACK
+    a, b, c = get_addresses()
+
+    b = int(to_value(b))
+    c = to_value(c)
+
+    arr = [c]*b
+
+    set_value(a, arr)
+    
     PC += 1
 
 def main():
@@ -233,6 +280,8 @@ def main():
         'DIV': DIV,
         'LABEL': LABEL,
         'J': JUMP,
+        'BEQ': BEQ,
+        'BNE': BNE,
         'BGT': BGT,
         'BGE': BGE, 
         'BLT': BLT,
@@ -241,6 +290,8 @@ def main():
         'CALL': CALL,
         'RET': RETURN,
         'PRINT': PRINT,
+        'READLN': READLN,
+        'ALLOC': ALLOC,
         '': None
     }
     args = sys.argv
@@ -250,13 +301,17 @@ def main():
     CODE, LABELS = read_code(args[1])
     PC = 0
 
-    while code_type(PC) != 'LABEL':
-        HANDLER[code_type(PC)]()
+    while PC < len(CODE) and code_type(PC) != 'LABEL':
+        func = code_type(PC)
+        if func:
+            HANDLER[code_type(PC)]()
+        else:
+            PC += 1
 
     STACK.append(Frame())
     PC = LABELS.get('main',None)
 
-    while PC is not None:
+    while PC is not None and PC < len(CODE):
         func = code_type(PC)
         if func:
             HANDLER[code_type(PC)]()

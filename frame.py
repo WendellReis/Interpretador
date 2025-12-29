@@ -28,8 +28,14 @@ class Frame():
             return self.args.get(id,None)
         return val
     
-    def set_var(self, id, val):
+    def set_var(self, id, val, pos=None):
         if id in self.args:
-            self.args[id] = val
+            if pos == None:
+                self.args[id] = val
+            else:
+                self.args[id][pos] = val
         elif id in self.variables:
-            self.variables[id] = val
+            if pos == None:
+                self.variables[id] = val
+            else:
+                self.variables[id][pos] = val
