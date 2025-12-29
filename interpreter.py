@@ -49,15 +49,12 @@ def get_addresses():
     return addresses
 
 def is_number(val):
-    if '.' in str(val):
-        try:
-            return float(val)
-        except ValueError:
-            return None
-    try:
-        return int(val)
-    except ValueError:
-        return None
+    if not isinstance(val, str): return val
+    if '.' in val:
+        try: return float(val)
+        except ValueError: return None
+    try: return int(val)
+    except ValueError: return None
 
 def to_value(id):
     global GLOBALS, STACK
@@ -94,28 +91,41 @@ def to_value(id):
 def set_value(id, val):
     global GLOBALS, STACK
     
+    def cast_value(old_val, new_val):
+        if old_val is None: return new_val
+        try:
+            if isinstance(old_val, float): return float(new_val)
+            
+            if isinstance(old_val, int): return int(new_val)
+            
+            return type(old_val)(new_val)
+        except (ValueError, TypeError):
+            return new_val
+
     if '$' not in id:
         if id in GLOBALS:
-            GLOBALS[id] = val
+            GLOBALS[id] = cast_value(GLOBALS[id], val)
         else:
             frame = current_frame()
             if frame:
                 if id not in frame.variables:
                     frame.new_var(id)
-                frame.set_var(id, val)
+
+                old_val = frame.get_var(id)
+                GLOBALS[id] = cast_value(old_val, val) if old_val is not None else val
+                frame.set_var(id, GLOBALS[id])
             else:
                 GLOBALS[id] = val
     else:
         name, pos = id.split('$')
         pos = int(to_value(pos))
         
-        if name in GLOBALS:
-            GLOBALS[name][pos] = val
-        else:
-            frame = current_frame()
-            if frame:
-                target_array = frame.get_var(name)
-                target_array[pos] = val
+        target_array = GLOBALS.get(name)
+        if target_array is None and current_frame():
+            target_array = current_frame().get_var(name)
+        
+        if target_array is not None:
+            target_array[pos] = cast_value(target_array[0], val)
 
 def LOAD():
     global PC
